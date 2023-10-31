@@ -1,8 +1,6 @@
 import csv
-import os
 
-
-def generateReposCSV(json, filename):
+def generateRepositoriesCsv(json, filename):
     headersRepo = [
         'nameWithOwner',
         'mergedPRs',
@@ -24,7 +22,7 @@ def generateReposCSV(json, filename):
                 ])
 
 
-def generatePrsCsv(json, filename):
+def generatePullRequestsCsv(json, filename):
     headersRepo = [
         'repo',
         'owner',

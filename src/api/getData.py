@@ -1,67 +1,77 @@
-import os
+from os import environ
 import requests
-from os.path import join, dirname
-from datetime import datetime
 import time
-import pandas as pd
+from pandas import read_csv
 
-def getReposData():
-    token = os.environ.get('ACCESS_TOKEN')
+def getRepositoriesData():
+    token = environ.get('ACCESS_TOKEN1')
     after = 'null'
     hasNextPage = True
     data = []
 
     while hasNextPage:
-        query = """
-        {
-            search (query: "stars:>100", type: REPOSITORY, first: 10, after: %s) {
-                pageInfo {
+        query = f"""
+        {{
+            search (query: "stars:>100", type: REPOSITORY, first: 10, after: {after}) {{
+                pageInfo {{
                     startCursor
                     hasNextPage
                     endCursor
-                }
-                nodes {
-                    ... on Repository {
+                }}
+                nodes {{
+                    ... on Repository {{
                         nameWithOwner
-                        mergedPRs: pullRequests(states:MERGED) {
+                        mergedPRs: pullRequests(states:MERGED) {{
                             totalCount
-                        }
-                        closedPRs: pullRequests(states:CLOSED) {
+                        }}
+                        closedPRs: pullRequests(states:CLOSED) {{
                             totalCount
-                        }
-                    }
-                }
-            }
-        }
-        """ % after
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
 
         url = 'https://api.github.com/graphql'
-        json = {'query': query}
-        headers = {'Authorization': 'Bearer %s' % token}
+        json_data = {'query': query}
+        headers = {'Authorization': f'Bearer {token}'}
 
-        response = requests.post(url=url, json=json, headers=headers).json()
+        try:
+            print('\nFetching repository...')
+            response = requests.post(url=url, json=json_data, headers=headers).json()
+            
+            if 'errors' in response or 'data' not in response:
+                print('Found error or empty data in response. Skipping...')
+                break
 
-        hasNextPage = response['data']['search']['pageInfo']['hasNextPage'] if response['data']['search']['pageInfo']['hasNextPage'] else False
-        after = '"%s"' % response['data']['search']['pageInfo']['endCursor']
+            hasNextPage = response['data']['search']['pageInfo']['hasNextPage']
+            after = f'"{response["data"]["search"]["pageInfo"]["endCursor"]}"'
 
-        for repoData in response['data']['search']['nodes']:
-            data.append({
-                'nameWithOwner': repoData['nameWithOwner'],
-                'mergedPRs': repoData['mergedPRs']['totalCount'],
-                'closedPRs': repoData['closedPRs']['totalCount'],
-            })
+            for repoData in response['data']['search']['nodes']:
+                data.append({
+                    'nameWithOwner': repoData['nameWithOwner'],
+                    'mergedPRs': repoData['mergedPRs']['totalCount'],
+                    'closedPRs': repoData['closedPRs']['totalCount'],
+                })
+            
+            print('Fetched with success!')
+
+        except (requests.RequestException, ValueError):
+            # Network error or invalid JSON error
+            print("Error fetching data. Skipping to next repository...")
+            break
 
     return data
 
 
-def getPRsData():
-    tokens = [os.environ.get('ACCESS_TOKEN1'), os.environ.get('ACCESS_TOKEN2')]
+def getPullRequestsData():
+    tokens = [environ.get('ACCESS_TOKEN1'), environ.get('ACCESS_TOKEN2')]
     csv_path = './src/data/repos.csv'
-    repos_df = pd.read_csv(csv_path)
+    repos_df = read_csv(csv_path)
     data = []
     tokenIndex = 0
 
-    start_time = time.time()
 
     for index, row in repos_df.iterrows():
         print("Getting PRs data for repo: %s" % row.nameWithOwner)

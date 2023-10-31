@@ -1,24 +1,32 @@
 from os.path import join, dirname
 from dotenv import load_dotenv
 
-from api.getData import getReposData
-from utils.generateCSV import generateReposCSV
-from utils.generateCSV import generatePrsCsv
-from api.getData import getPRsData
+from api.getData import getPullRequestsData, getRepositoriesData
+from utils.generateCSV import generateRepositoriesCsv, generatePullRequestsCsv
 
 
 def main():
+    # Carregando variáveis de ambiente
     dotenv_path = join(dirname(dirname(__file__)), '.env')
-
     load_dotenv(dotenv_path)
 
-    print('Getting pullrequests data...')
-    prs = getPRsData()
+    # Buscando repositórios    
+    print('Getting repositories data...')
+    repos = getRepositoriesData()
+    
+    # Gerando CSV de repositórios
+    print('Generating repositories csv...')
+    generateRepositoriesCsv(repos, 'repos')
 
-    print('Generating pullrequests csv...')
-    generatePrsCsv(prs, 'prs')
+    # Buscando pull requests
+    print('Getting pull requests data...')
+    prs = getPullRequestsData()
+
+    # Gerando CSV de pull requests
+    print('Generating pull requests csv...')
+    generatePullRequestsCsv(prs, 'prs')
+    
     print('Done')
-
 
 if __name__ == "__main__":
     main()
