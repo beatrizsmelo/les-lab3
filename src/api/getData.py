@@ -9,7 +9,7 @@ def getRepositoriesData():
     hasNextPage = True
     data = []
 
-    while hasNextPage:
+    while len(data) < 200:
         query = f"""
         {{
             search (query: "stars:>100", type: REPOSITORY, first: 10, after: {after}) {{
@@ -74,7 +74,7 @@ def getPullRequestsData():
 
 
     for index, row in repos_df.iterrows():
-        print("Getting PRs data for repo: %s" % row.nameWithOwner)
+        print("\nGetting PRs data for repo: %s" % row.nameWithOwner)
 
         after = 'null'
         hasNextPage = True
@@ -120,9 +120,11 @@ def getPullRequestsData():
                 json = {'query': query}
                 headers = {'Authorization': 'Bearer %s' % tokens[tokenIndex]}
 
+                print('\nFetching a pull request...')
                 responsePayload = requests.post(url=url, json=json, headers=headers)
 
                 if responsePayload.status_code == 200:
+                    print('Fetched with success!')
                     response = responsePayload.json()
 
                     if 'errors' in response:

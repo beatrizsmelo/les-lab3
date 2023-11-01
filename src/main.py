@@ -11,22 +11,22 @@ def main():
     load_dotenv(dotenv_path)
 
     # Buscando repositórios    
-    print('Getting repositories data...')
+    print('\nGetting repositories data...')
     repos = getRepositoriesData()
     
     # Gerando CSV de repositórios
-    print('Generating repositories csv...')
-    generateRepositoriesCsv(repos, 'repos')
+    print('\nGenerating repositories csv...')
+    generateRepositoriesCsv(repos, './src/data/repos')
 
     # Buscando pull requests
-    print('Getting pull requests data...')
+    print('\nGetting pull requests data...')
     prs = getPullRequestsData()
 
     # Gerando CSV de pull requests
-    print('Generating pull requests csv...')
-    generatePullRequestsCsv(prs, 'prs')
+    print('\nGenerating pull requests csv...')
+    generatePullRequestsCsv(prs, './src/data/prs')
     
-    print('Done')
+    print('\nDone!')
 
 if __name__ == "__main__":
     main()
