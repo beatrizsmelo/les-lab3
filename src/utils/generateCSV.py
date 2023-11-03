@@ -8,7 +8,7 @@ def generateRepositoriesCsv(json, filename):
     ]
 
     print("Generating " + filename + " CSV...")
-    with open(filename + '.csv', 'x') as f:
+    with open(filename + '.csv', 'w', newline='') as f:
         writer = csv.writer(f)
 
         writer.writerow(headersRepo)
@@ -32,13 +32,15 @@ def generatePullRequestsCsv(json, filename):
         'closedAt',
         'mergedAt',
         'description',
-        'reviews'
+        'reviews',
         'participants',
         'comments',
+        'additions',
+        'deletions'
     ]
 
     print("Generating " + filename + " CSV...")
-    with open('./src/data/' + filename + '.csv', 'x') as f:
+    with open(filename + '.csv', 'w', newline='') as f:
         writer = csv.writer(f)
 
         writer.writerow(headersRepo)
@@ -56,4 +58,6 @@ def generatePullRequestsCsv(json, filename):
                     prData['reviews'],
                     prData['participants'],
                     prData['comments'],
+                    prData['additions'],
+                    prData['deletions']
             ])

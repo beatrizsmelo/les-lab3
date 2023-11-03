@@ -2,14 +2,17 @@ from os import environ
 import requests
 import time
 from pandas import read_csv
+from datetime import datetime
+
+MAX_RETRIES = 3  # Define o número máximo de tentativas para erros temporários
 
 def getRepositoriesData():
     token = environ.get('ACCESS_TOKEN1')
     after = 'null'
     hasNextPage = True
     data = []
-
-    while len(data) < 200:
+    
+    while len(data) < 400:
         query = f"""
         {{
             search (query: "stars:>100", type: REPOSITORY, first: 10, after: {after}) {{
@@ -40,7 +43,7 @@ def getRepositoriesData():
         try:
             print('\nFetching repository...')
             response = requests.post(url=url, json=json_data, headers=headers).json()
-            
+
             if 'errors' in response or 'data' not in response:
                 print('Found error or empty data in response. Skipping...')
                 break
@@ -54,7 +57,7 @@ def getRepositoriesData():
                     'mergedPRs': repoData['mergedPRs']['totalCount'],
                     'closedPRs': repoData['closedPRs']['totalCount'],
                 })
-            
+
             print('Fetched with success!')
 
         except (requests.RequestException, ValueError):
@@ -72,70 +75,82 @@ def getPullRequestsData():
     data = []
     tokenIndex = 0
 
-
     for index, row in repos_df.iterrows():
+        total_prs = row.mergedPRs + row.closedPRs
+        if total_prs < 100:
+            print(f"Skipping {row.nameWithOwner} as it has only {total_prs} PRs (merged + closed).")
+            continue    
+                
         print("\nGetting PRs data for repo: %s" % row.nameWithOwner)
 
         after = 'null'
         hasNextPage = True
-        repoName = row.nameWithOwner.split('/')[0]
-        repoOwnerName = row.nameWithOwner.split('/')[1]
+        repoName = row.nameWithOwner.split('/')[1]
+        repoOwnerName = row.nameWithOwner.split('/')[0]
+        pr_count = 0
+        retries = 0  # Contador de tentativas
 
-        while hasNextPage:
+
+        while hasNextPage and pr_count < 100:
+            fetch_count = min(100 - pr_count, 50)  # Assuming GitHub API lets us fetch 50 at a time
             try:
                 query = """
-                    query {
-                        repository(owner: "%s", name: "%s") {
-                            pullRequests(states: [MERGED, CLOSED], first: 40, after: %s) {
-                                nodes {
-                                    id
-                                    files {
-                                        totalCount
-                                    }
-                                    updatedAt
-                                    createdAt
-                                    closedAt
-                                    mergedAt
-                                    body
-                                    reviews {
-                                        totalCount
-                                    }
-                                    participants {
-                                        totalCount
-                                    }
-                                    comments {
-                                        totalCount
-                                    }
-                                }
-                                pageInfo {
-                                    endCursor
-                                    hasNextPage
-                                }
-                            }
-                        }
-                    }
-                """ % (repoName, repoOwnerName, after)
+                {{
+                    repository(owner: "{owner}", name: "{name}") {{
+                        pullRequests(states: [MERGED, CLOSED], first: {fetch_count}, after: {after}) {{
+                            nodes {{
+                                id
+                                files {{
+                                    totalCount
+                                }}
+                                updatedAt
+                                createdAt
+                                closedAt
+                                mergedAt
+                                body
+                                reviews {{
+                                    totalCount
+                                }}
+                                participants {{
+                                    totalCount
+                                }}
+                                comments {{
+                                    totalCount
+                                }}
+                                additions
+                                deletions                        
+                            }}
+                            pageInfo {{
+                                endCursor
+                                hasNextPage
+                            }}
+                        }}
+                    }}
+                }}
+                """.format(owner=repoOwnerName, name=repoName, fetch_count=fetch_count, after=after)
 
                 url = 'https://api.github.com/graphql'
-                json = {'query': query}
+                json_data = {'query': query}
                 headers = {'Authorization': 'Bearer %s' % tokens[tokenIndex]}
 
-                print('\nFetching a pull request...')
-                responsePayload = requests.post(url=url, json=json, headers=headers)
+                print(f'\nFetching pull requests {pr_count + 1} to {pr_count + fetch_count}...')
+                responsePayload = requests.post(url=url, json=json_data, headers=headers)
 
                 if responsePayload.status_code == 200:
                     print('Fetched with success!')
                     response = responsePayload.json()
 
-                    if 'errors' in response:
-                        for error in response['errors']:
-                            print(f"GraphQL error: {error['message']}")
+                    hasNextPage = response['data']['repository']['pullRequests']['pageInfo']['hasNextPage']
+                    after = '"%s"' % response['data']['repository']['pullRequests']['pageInfo']['endCursor']
 
-                    else:
-                        hasNextPage = response['data']['repository']['pullRequests']['pageInfo']['hasNextPage'] if response['data']['repository']['pullRequests']['pageInfo']['hasNextPage'] else False
-                        after = '"%s"' % response['data']['repository']['pullRequests']['pageInfo']['endCursor']
+                    for prData in response['data']['repository']['pullRequests']['nodes']:
+                        created_at = datetime.fromisoformat(prData['createdAt'].replace('Z', '+00:00'))
+                        closed_or_merged_at = prData['mergedAt'] or prData['closedAt']
+                        if closed_or_merged_at:
+                            closed_or_merged_at = datetime.fromisoformat(closed_or_merged_at.replace('Z', '+00:00'))
+                            difference = closed_or_merged_at - created_at
 
-                        for prData in response['data']['repository']['pullRequests']['nodes']:
+                            if difference.total_seconds() > 3600:  # 1 hour
                                 data.append({
                                     'id': prData['id'],
                                     'repo': repoName,
@@ -149,20 +164,43 @@ def getPullRequestsData():
                                     'reviews': prData['reviews']['totalCount'],
                                     'participants': prData['participants']['totalCount'],
                                     'comments': prData['comments']['totalCount'],
+                                    'additions': prData['additions'],
+                                    'deletions': prData['deletions']
                                 })
+                                pr_count += 1
+                    retries = 0  # Reset the retries counter after successful fetch
 
-                        tokenIndex = 0 if tokenIndex == 1 else 1
-                        time.sleep(5)
+                elif responsePayload.status_code == 502:
+                    print("Server error (502), retrying...")
+                    retries += 1
+                    if retries >= MAX_RETRIES:
+                        print("Max retries reached, skipping to next repository.")
+                        break
+                    time.sleep(10)  # Esperando um pouco para tentar novamente
+
+                elif responsePayload.status_code == 401:
+                    print("Authentication error (401), switching token or aborting...")
+                    tokenIndex = 0 if tokenIndex == 1 else 1  # Try to switch tokens
+                    if not tokens[tokenIndex]:  # If there are no valid tokens left, skip to the next repository
+                        print("No valid tokens available, skipping to next repository.")
+                        break
+
                 else:
-                    print(f"HTTP error {responsePayload.status_code}")
-                    tokenIndex = 0 if tokenIndex == 1 else 1
-            
-            except Exception as e:
-                print(f"Exception: {e}")
-                tokenIndex = 0 if tokenIndex == 1 else 1
-                time.sleep(5)
+                    print(f"Unhandled HTTP error {responsePayload.status_code}, skipping to next repository.")
+                    break
 
-        print(f"Finished fetching data for {row.nameWithOwner}.")
-        time.sleep(1)
-    
+            except Exception as e:
+                print(f"Exception occurred: {e}")
+                break  # Exit the current repository loop and move to the next one
+
+            time.sleep(5)
+
+        print(f"Finished fetching data for {row.nameWithOwner}. Pull requests collected.")
+        #{pr_count} 
+
     return data
+
+if __name__ == "__main__":
+    repositories = getRepositoriesData()
+    pull_requests = getPullRequestsData()
+    print(f"Collected data for {len(pull_requests)} pull requests from multiple repositories.")

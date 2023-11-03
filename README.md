@@ -21,8 +21,9 @@
 
   ```
   ACCESS_TOKEN1="um token aqui"
-  ACCESS_TOKEN1="outro token aqui"
+  ACCESS_TOKEN2="outro token aqui"
   ```
+  >Há um arquivo **.env.example** no projeto em caso de dúvidas de como deve ser montado seu arquivo **.env**
 
 # Instalando as dependências do projeto
 

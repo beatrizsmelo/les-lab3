@@ -12,11 +12,11 @@ def main():
 
     # Buscando repositórios    
     print('\nGetting repositories data...')
-    repos = getRepositoriesData()
+    #repos = getRepositoriesData()
     
     # Gerando CSV de repositórios
     print('\nGenerating repositories csv...')
-    generateRepositoriesCsv(repos, './src/data/repos')
+    #generateRepositoriesCsv(repos, './src/data/repos')
 
     # Buscando pull requests
     print('\nGetting pull requests data...')
